@@ -49,7 +49,6 @@ class EventHandler(AssistantEventHandler):
           
           func = getattr(plugin['tools'], method_name)
           success = func(**args)
-          print('tool done', success)
 
           if success is not True:
             failureReason = success
