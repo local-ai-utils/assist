@@ -1,15 +1,13 @@
-import os
-import yaml
-from .plugin_loader import load_plugins
 import sys
 import json
 import subprocess
+from local_ai_utils_core import LocalAIUtilsCore
 from typing_extensions import override
-from openai import OpenAI, AssistantEventHandler
+from openai import AssistantEventHandler
+from assist.plugin import config
 
-plugins = []
-config = {}
-client = None
+core = None
+plugin_config = {}
 
 NOTIFY_CMD = '''
 on run argv
@@ -29,7 +27,8 @@ class EventHandler(AssistantEventHandler):
     ##Text(annotations=[], value="I'm your personal assistant, ready to assist you with tasks and information.")
       
   def on_tool_call_done(self, tool_call):
-    global plugins
+    global core
+    client = core.clients.open_ai()
 
     success = False
     failureReason = "Unknown"
@@ -40,6 +39,7 @@ class EventHandler(AssistantEventHandler):
     plugin_name = function_name.split('--')[0]
     method_name = function_name.split('--')[1]
 
+    plugins = core.getPlugins()
     if plugin_name in plugins:
       plugin = plugins[plugin_name]
 
@@ -65,7 +65,7 @@ class EventHandler(AssistantEventHandler):
       output["error"] = failureReason
 
     with client.beta.threads.runs.submit_tool_outputs_stream(
-       thread_id=config['thread'],
+       thread_id=plugin_config['thread'],
        run_id=self.current_run.id,
        tool_outputs=[
          {
@@ -79,37 +79,32 @@ class EventHandler(AssistantEventHandler):
     ##FunctionToolCall(id='call_Q7ME5bR1LwC88e7VBiUXY8sZ', function=Function(arguments='{"categories":["reminder","call","Cody"],"note_text":"Remind me to call Cody."}', name='create_note', output=None), type='function', index=0)
  
 def sendChat(prompt):
+    global core
+    client = core.clients.open_ai()
+
     notify('AI Assist', 'Prompting...')
     client.beta.threads.messages.create(
-        thread_id=config['thread'],
+        thread_id=plugin_config['thread'],
         role="user",
         content=prompt
     )
     with client.beta.threads.runs.stream(
-        thread_id=config['thread'],
-        assistant_id=config['assistant'],
+        thread_id=plugin_config['thread'],
+        assistant_id=plugin_config['assistant'],
         event_handler=EventHandler(),
     ) as stream:
         stream.until_done()
 
-def create_note(text, categories):
-    note_id = insert_note(text)
-
-    # Handle categories
-    for category in categories:
-        category_id = create_category(category)
-        assign_category(note_id, category_id)
-
 def main():
-  global plugins, config, client
-
-  config_path = os.path.expanduser('~/.config/ai-utils.yaml')
-
-  with open(config_path, 'r') as file:
-      config = yaml.safe_load(file)
-
-  client = OpenAI(api_key=config['keys']['openai'])
-  plugins = load_plugins(config['plugins'], config)
+  global core, plugin_config
+  core = LocalAIUtilsCore()
+  plugin_config = config()
+  
+  client = core.clients.open_ai()
+  if client is None:
+    raise Exception("Could not create OpenAI client - check your API key")
+  
+  plugins = core.getPlugins()
 
   # Pass first argument as prompt
   if len(sys.argv) > 1:
@@ -128,7 +123,7 @@ def main():
                   })
 
           response = client.beta.assistants.update(
-            config['assistant'],
+            plugin_config['assistant'],
             tools=tools
           )
 
