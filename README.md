@@ -1,6 +1,8 @@
 # Local AI Utils - Assist
 A plugin for [local-ai-utils](https://github.com/local-ai-utils/core), adding the ability to interact with an LLM Assistant. It is exposed as a CLI utility named `assist`, which can be sent a prompt. It also adds tool support that other LAIU plugins can tie in to.
 
+![Assist Demo](/docs/assist.gif)
+
 ## Quickstart
 
 ### Installation
