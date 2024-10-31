@@ -103,13 +103,12 @@ def main():
   client = core.clients.open_ai()
   if client is None:
     raise Exception("Could not create OpenAI client - check your API key")
-  
-  plugins = core.getPlugins()
 
   # Pass first argument as prompt
   if len(sys.argv) > 1:
       match sys.argv[1]:
         case "update_assistant":
+          plugins = core.getPlugins()
           tools = []
           for plugin in plugins:
              plugin = plugins[plugin]
