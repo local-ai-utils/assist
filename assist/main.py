@@ -1,7 +1,10 @@
 import json
 import subprocess
+from typing import Any, Dict, AnyStr
+
 from typing_extensions import override
 from openai import AssistantEventHandler
+
 from local_ai_utils_core import LocalAIUtilsCore
 from local_ai_utils_assist.plugin import config
 
@@ -11,34 +14,33 @@ display notification (item 2 of argv) with title (item 1 of argv)
 end run
 '''
 
-def notify(title, text):
+def notify(title: AnyStr, text: AnyStr):
     subprocess.call(['osascript', '-e', NOTIFY_CMD, title, text])
  
 # First, we create a EventHandler class to define
 # how we want to handle the events in the response stream.
 class EventHandler(AssistantEventHandler): 
   @override
-  def __init__(self, core):
+  def __init__(self, core: LocalAIUtilsCore):
     self.core = core
     super().__init__()
      
   @override
-  def on_text_done(self, text) -> None:
+  def on_text_done(self, text: AnyStr) -> None:
     print(text.value)
     ##Text(annotations=[], value="I'm your personal assistant, ready to assist you with tasks and information.")
       
-  def on_tool_call_done(self, tool_call):
+  def on_tool_call_done(self, tool_call: Dict):
     plugin_config = config()
     client = self.core.clients.open_ai()
 
     success = False
-    failureReason = "Unknown"
+    failure_reason = "Unknown"
 
     notify('AI Assist', f"Tool call: {tool_call.function.name}")
 
     function_name = tool_call.function.name
-    plugin_name = function_name.split('--')[0]
-    method_name = function_name.split('--')[1]
+    plugin_name, method_name = function_name.split('--')
 
     plugins = self.core.getPlugins()
     if plugin_name in plugins:
@@ -49,22 +51,25 @@ class EventHandler(AssistantEventHandler):
           args = json.loads(tool_call.function.arguments)
           
           func = getattr(plugin['tools'], method_name)
-          success = func(**args)
+          result = func(**args)
+          success = result is True
 
-          if success is not True:
-            failureReason = success
-            success = False
+          if not success:
+            failure_reason = str(result)
 
         except Exception as e:
-          failureReason = str(e)
+          failure_reason = str(e)
 
     output = {
        success: success
     }
     if not success:
-      print('Failure: ', failureReason)
-      output["error"] = failureReason
+      print('Failure: ', failure_reason)
+      output["error"] = failure_reason
 
+    self._submit_tool_outputs(client, plugin_config, tool_call, output)
+
+  def _submit_tool_outputs(self, client: Any, plugin_config: Dict, tool_call: Any, output: Dict) -> None:
     with client.beta.threads.runs.submit_tool_outputs_stream(
        thread_id=plugin_config['thread'],
        run_id=self.current_run.id,
@@ -79,7 +84,7 @@ class EventHandler(AssistantEventHandler):
       stream.until_done()
     ##FunctionToolCall(id='call_Q7ME5bR1LwC88e7VBiUXY8sZ', function=Function(arguments='{"categories":["reminder","call","Cody"],"note_text":"Remind me to call Cody."}', name='create_note', output=None), type='function', index=0)
  
-def sendChat(core, prompt):
+def sendChat(core: LocalAIUtilsCore, prompt: AnyStr):
     plugin_config = config()
     client = core.clients.open_ai()
 
@@ -121,6 +126,6 @@ def update_assistant():
 
   print(response)
   
-def prompt(prompt):
+def prompt(prompt: AnyStr):
   core = LocalAIUtilsCore()
   sendChat(core, prompt)

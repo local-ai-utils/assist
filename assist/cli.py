@@ -1,4 +1,5 @@
 import fire
+
 from local_ai_utils_assist.main import update_assistant, prompt
 
 def main():
