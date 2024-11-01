@@ -1,13 +1,9 @@
-import sys
 import json
 import subprocess
-from local_ai_utils_core import LocalAIUtilsCore
 from typing_extensions import override
 from openai import AssistantEventHandler
-from assist.plugin import config
-
-core = None
-plugin_config = {}
+from local_ai_utils_core import LocalAIUtilsCore
+from local_ai_utils_assist.plugin import config
 
 NOTIFY_CMD = '''
 on run argv
@@ -20,15 +16,20 @@ def notify(title, text):
  
 # First, we create a EventHandler class to define
 # how we want to handle the events in the response stream.
-class EventHandler(AssistantEventHandler):    
+class EventHandler(AssistantEventHandler): 
+  @override
+  def __init__(self, core):
+    self.core = core
+    super().__init__()
+     
   @override
   def on_text_done(self, text) -> None:
     print(text.value)
     ##Text(annotations=[], value="I'm your personal assistant, ready to assist you with tasks and information.")
       
   def on_tool_call_done(self, tool_call):
-    global core
-    client = core.clients.open_ai()
+    plugin_config = config()
+    client = self.core.clients.open_ai()
 
     success = False
     failureReason = "Unknown"
@@ -39,7 +40,7 @@ class EventHandler(AssistantEventHandler):
     plugin_name = function_name.split('--')[0]
     method_name = function_name.split('--')[1]
 
-    plugins = core.getPlugins()
+    plugins = self.core.getPlugins()
     if plugin_name in plugins:
       plugin = plugins[plugin_name]
 
@@ -73,13 +74,13 @@ class EventHandler(AssistantEventHandler):
            "output": json.dumps(output)
          }
        ],
-       event_handler=EventHandler(),
+       event_handler=EventHandler(self.core),
     ) as stream:
       stream.until_done()
     ##FunctionToolCall(id='call_Q7ME5bR1LwC88e7VBiUXY8sZ', function=Function(arguments='{"categories":["reminder","call","Cody"],"note_text":"Remind me to call Cody."}', name='create_note', output=None), type='function', index=0)
  
-def sendChat(prompt):
-    global core
+def sendChat(core, prompt):
+    plugin_config = config()
     client = core.clients.open_ai()
 
     notify('AI Assist', 'Prompting...')
@@ -91,52 +92,35 @@ def sendChat(prompt):
     with client.beta.threads.runs.stream(
         thread_id=plugin_config['thread'],
         assistant_id=plugin_config['assistant'],
-        event_handler=EventHandler(),
+        event_handler=EventHandler(core),
     ) as stream:
         stream.until_done()
 
-def main():
-  global core, plugin_config
+def update_assistant():
   core = LocalAIUtilsCore()
-  plugin_config = config()
-  
   client = core.clients.open_ai()
-  if client is None:
-    raise Exception("Could not create OpenAI client - check your API key")
+  plugin_config = config()
 
-  # Pass first argument as prompt
-  if len(sys.argv) > 1:
-      match sys.argv[1]:
-        case "update_assistant":
-          plugins = core.getPlugins()
-          tools = []
-          for plugin in plugins:
-             plugin = plugins[plugin]
-             if 'functions' in plugin:
-                for function in plugin['functions']:
-                  toolFunc = function.copy()
-                  toolFunc['name'] = f"{plugin['name']}--{toolFunc['name']}"
-                  tools.append({
-                    "type": "function",
-                    "function": toolFunc
-                  })
+  plugins = core.getPlugins()
+  tools = []
+  for plugin in plugins:
+      plugin = plugins[plugin]
+      if 'functions' in plugin:
+        for function in plugin['functions']:
+          toolFunc = function.copy()
+          toolFunc['name'] = f"{plugin['name']}--{toolFunc['name']}"
+          tools.append({
+            "type": "function",
+            "function": toolFunc
+          })
 
-          response = client.beta.assistants.update(
-            plugin_config['assistant'],
-            tools=tools
-          )
+  response = client.beta.assistants.update(
+    plugin_config['assistant'],
+    tools=tools
+  )
 
-          print(response)
-
-        case "prompt":
-          if len(sys.argv) > 2:
-            sendChat(sys.argv[2])
-          else:
-            print("Please provide a prompt")
-
-          return
-  else:
-      print("prompt <msg> or update_assistant")
-
-if __name__ == "__main__":
-  main()
+  print(response)
+  
+def prompt(prompt):
+  core = LocalAIUtilsCore()
+  sendChat(core, prompt)
