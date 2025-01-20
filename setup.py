@@ -2,7 +2,7 @@ from setuptools import setup, find_packages
 
 setup(
     name="local-ai-utils-assist",
-    version="0.1.0",
+    version="0.1.1",
     packages=['assist'],
     package_dir={"assist": "assist"},
     entry_points={
