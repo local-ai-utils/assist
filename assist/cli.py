@@ -1,6 +1,6 @@
 import fire
 
-from assist.main import update_assistant, prompt
+from .main import update_assistant, prompt
 
 def main():
     fire.Fire({

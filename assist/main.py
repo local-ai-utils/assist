@@ -6,7 +6,7 @@ from typing_extensions import override
 from openai import AssistantEventHandler
 
 from local_ai_utils_core import LocalAIUtilsCore
-from assist.plugin import config
+from .plugin import config
 
 NOTIFY_CMD = '''
 on run argv
