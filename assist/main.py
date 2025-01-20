@@ -6,7 +6,7 @@ from typing_extensions import override
 from openai import AssistantEventHandler
 
 from local_ai_utils_core import LocalAIUtilsCore
-from local_ai_utils_assist.plugin import config
+from assist.plugin import config
 
 NOTIFY_CMD = '''
 on run argv
@@ -59,9 +59,13 @@ class EventHandler(AssistantEventHandler):
 
         except Exception as e:
           failure_reason = str(e)
+      else:
+        failure_reason = f"Tool {method_name} not found in plugin {plugin_name}"
+    else:
+      failure_reason = f"Plugin {plugin_name} not found"
 
     output = {
-       success: success
+       'success': success
     }
     if not success:
       print('Failure: ', failure_reason)
