@@ -1,7 +1,7 @@
 import json
 import subprocess
 from typing import Any, Dict, AnyStr
-
+from datetime import datetime
 from typing_extensions import override
 from openai import AssistantEventHandler
 
@@ -36,6 +36,7 @@ class EventHandler(AssistantEventHandler):
 
     success = False
     failure_reason = "Unknown"
+    result = None
 
     notify('AI Assist', f"Tool call: {tool_call.function.name}")
 
@@ -51,11 +52,10 @@ class EventHandler(AssistantEventHandler):
           args = json.loads(tool_call.function.arguments)
           
           func = getattr(plugin['tools'], method_name)
-          result = func(**args)
-          success = result is True
+          success, result = func(**args)
 
           if not success:
-            failure_reason = str(result)
+            failure_reason = result
 
         except Exception as e:
           failure_reason = str(e)
@@ -65,7 +65,8 @@ class EventHandler(AssistantEventHandler):
       failure_reason = f"Plugin {plugin_name} not found"
 
     output = {
-       'success': success
+       'success': success,
+       'result': result
     }
     if not success:
       print('Failure: ', failure_reason)
@@ -88,6 +89,15 @@ class EventHandler(AssistantEventHandler):
       stream.until_done()
     ##FunctionToolCall(id='call_Q7ME5bR1LwC88e7VBiUXY8sZ', function=Function(arguments='{"categories":["reminder","call","Cody"],"note_text":"Remind me to call Cody."}', name='create_note', output=None), type='function', index=0)
  
+def wrap_prompt_with_context(prompt: AnyStr):
+  return f"""
+  ===CONTEXT===
+  Current Date and Time: {datetime.now().strftime("%Y-%m-%d %H:%M:%S")}
+
+  ===USER PROMPT===
+  {prompt}
+  """
+
 def sendChat(core: LocalAIUtilsCore, prompt: AnyStr):
     plugin_config = config()
     client = core.clients.open_ai()
@@ -96,7 +106,7 @@ def sendChat(core: LocalAIUtilsCore, prompt: AnyStr):
     client.beta.threads.messages.create(
         thread_id=plugin_config['thread'],
         role="user",
-        content=prompt
+        content=wrap_prompt_with_context(prompt)
     )
     with client.beta.threads.runs.stream(
         thread_id=plugin_config['thread'],
@@ -125,7 +135,8 @@ def update_assistant():
 
   response = client.beta.assistants.update(
     plugin_config['assistant'],
-    tools=tools
+    tools=tools,
+    instructions=plugin_config['instructions']
   )
 
   print(response)
